@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>반도체 K자형 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb; --card: #ffffff; --border: #e4e3df;
+  --text: #0b0b0b; --text2: #52514e; --muted: #8a8984; --grid: #ecebe7;
+  --semi: #2a78d6; --non: #eb6834; --inv: #1baf7a; --band: #f1f0ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19; --card: #222220; --border: #3a3936;
+    --text: #f0efec; --text2: #c3c2b7; --muted: #8f8e88; --grid: #2f2e2b;
+    --semi: #3987e5; --non: #d95926; --inv: #199e70; --band: #2a2927;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --card: #222220; --border: #3a3936;
+  --text: #f0efec; --text2: #c3c2b7; --muted: #8f8e88; --grid: #2f2e2b;
+  --semi: #3987e5; --non: #d95926; --inv: #199e70; --band: #2a2927;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 1.5rem; margin: 0 0 4px; }
+.sub { color: var(--text2); margin: 0 0 20px; font-size: .92rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.controls label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--text2); }
+select { font: inherit; font-size: .9rem; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets button { font: inherit; font-size: .8rem; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text2); cursor: pointer; }
+.presets button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+.kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.kpi .k { font-size: .78rem; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+.kpi .v { font-size: 1.45rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi .n { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px 4px; margin-bottom: 14px; }
+.card h2 { font-size: 1rem; margin: 4px 10px 0; }
+.card p { font-size: .8rem; color: var(--text2); margin: 2px 10px 0; }
+.chart { width: 100%; height: 360px; }
+footer { font-size: .78rem; color: var(--muted); margin-top: 18px; line-height: 1.6; }
+footer a { color: var(--text2); }
+@media (max-width: 600px) { .chart { height: 300px; } h1 { font-size: 1.25rem; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>반도체만 날았나? — 제조업 K자형 대시보드</h1>
+  <p class="sub">반도체 및 부품(C26A) vs 반도체 제외 제조업 · 광공업생산지수(2020=100) · 2017.01~2026.07 월별</p>
+
+  <section class="controls" aria-label="필터">
+    <label>시작 월 <select id="start"></select></label>
+    <label>끝 월 <select id="end"></select></label>
+    <label>추세 그래프 지표
+      <select id="metric">
+        <option value="ma12">12개월 이동평균</option>
+        <option value="raw">원지수(월별)</option>
+      </select>
+    </label>
+    <div>
+      <div style="font-size:.8rem;color:var(--text2);margin-bottom:4px">국면 바로가기</div>
+      <div class="presets" id="presets"></div>
+    </div>
+  </section>
+
+  <section class="kpis" id="kpis" aria-live="polite"></section>
+
+  <div class="card"><h2>생산지수 추세</h2><p>선택 기간의 생산 수준. 두 선의 거리가 K자형 격차다.</p><div class="chart" id="c1"></div></div>
+  <div class="card"><h2>전년동월대비 생산 증가율</h2><p>계절성을 뺀 성장 속도. 0% 선 아래는 1년 전보다 줄었다는 뜻.</p><div class="chart" id="c2"></div></div>
+  <div class="card"><h2>반도체 생산 vs 재고 증가율</h2><p>재고가 급증하고 생산이 꺾이는 시기를 찾아보세요 (예: 2022년).</p><div class="chart" id="c3"></div></div>
+
+  <footer>
+    자료: 통계청 KOSIS 광업제조업동향조사 「기타분류별 광공업생산지수(2020=100)」, 2026.06·07은 잠정치.
+    상관계수는 같은 달 기준이며 인과관계를 뜻하지 않는다. 분석 리포트는 GitHub 저장소의 REPORT.md를 참고.
+  </footer>
+</main>
+<script>
+const DATA = [{"month": "2017-01", "semi_prod": 68.8, "nonsemi_prod": 100.95, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-02", "semi_prod": 62.06, "nonsemi_prod": 101.27, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-03", "semi_prod": 70.31, "nonsemi_prod": 115.15, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-04", "semi_prod": 64.32, "nonsemi_prod": 109.43, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-05", "semi_prod": 71.12, "nonsemi_prod": 108.37, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-06", "semi_prod": 67.98, "nonsemi_prod": 110.38, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-07", "semi_prod": 71.3, "nonsemi_prod": 107.1, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-08", "semi_prod": 75.94, "nonsemi_prod": 101.06, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-09", "semi_prod": 78.67, "nonsemi_prod": 111.97, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-10", "semi_prod": 80.88, "nonsemi_prod": 98.52, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-11", "semi_prod": 76.87, "nonsemi_prod": 111.23, "semi_prod_ma12": null, "nonsemi_prod_ma12": null, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2017-12", "semi_prod": 78.33, "nonsemi_prod": 105.83, "semi_prod_ma12": 72.22, "nonsemi_prod_ma12": 106.77, "semi_prod_yoy": null, "nonsemi_prod_yoy": null, "semi_inv_yoy": null}, {"month": "2018-01", "semi_prod": 73.5, "nonsemi_prod": 105.72, "semi_prod_ma12": 72.61, "nonsemi_prod_ma12": 107.17, "semi_prod_yoy": 6.84, "nonsemi_prod_yoy": 4.72, "semi_inv_yoy": 8.67}, {"month": "2018-02", "semi_prod": 68.68, "nonsemi_prod": 91.63, "semi_prod_ma12": 73.16, "nonsemi_prod_ma12": 106.36, "semi_prod_yoy": 10.67, "nonsemi_prod_yoy": -9.52, "semi_inv_yoy": 17.04}, {"month": "2018-03", "semi_prod": 79.84, "nonsemi_prod": 108.37, "semi_prod_ma12": 73.95, "nonsemi_prod_ma12": 105.8, "semi_prod_yoy": 13.55, "nonsemi_prod_yoy": -5.89, "semi_inv_yoy": 28.35}, {"month": "2018-04", "semi_prod": 80.36, "nonsemi_prod": 106.57, "semi_prod_ma12": 75.29, "nonsemi_prod_ma12": 105.56, "semi_prod_yoy": 24.93, "nonsemi_prod_yoy": -2.61, "semi_inv_yoy": 19.5}, {"month": "2018-05", "semi_prod": 78.67, "nonsemi_prod": 108.79, "semi_prod_ma12": 75.92, "nonsemi_prod_ma12": 105.6, "semi_prod_yoy": 10.62, "nonsemi_prod_yoy": 0.39, "semi_inv_yoy": 3.54}, {"month": "2018-06", "semi_prod": 86.64, "nonsemi_prod": 106.25, "semi_prod_ma12": 77.47, "nonsemi_prod_ma12": 105.25, "semi_prod_yoy": 27.44, "nonsemi_prod_yoy": -3.74, "semi_inv_yoy": 18.69}, {"month": "2018-07", "semi_prod": 90.41, "nonsemi_prod": 104.66, "semi_prod_ma12": 79.07, "nonsemi_prod_ma12": 105.05, "semi_prod_yoy": 26.81, "nonsemi_prod_yoy": -2.27, "semi_inv_yoy": 14.14}, {"month": "2018-08", "semi_prod": 87.22, "nonsemi_prod": 101.91, "semi_prod_ma12": 80.01, "nonsemi_prod_ma12": 105.12, "semi_prod_yoy": 14.84, "nonsemi_prod_yoy": 0.84, "semi_inv_yoy": 7.1}, {"month": "2018-09", "semi_prod": 88.79, "nonsemi_prod": 98.62, "semi_prod_ma12": 80.85, "nonsemi_prod_ma12": 104.01, "semi_prod_yoy": 12.85, "nonsemi_prod_yoy": -11.92, "semi_inv_yoy": 6.09}, {"month": "2018-10", "semi_prod": 92.27, "nonsemi_prod": 110.49, "semi_prod_ma12": 81.8, "nonsemi_prod_ma12": 105.0, "semi_prod_yoy": 14.08, "nonsemi_prod_yoy": 12.15, "semi_inv_yoy": 2.32}, {"month": "2018-11", "semi_prod": 84.31, "nonsemi_prod": 108.9, "semi_prod_ma12": 82.42, "nonsemi_prod_ma12": 104.81, "semi_prod_yoy": 9.67, "nonsemi_prod_yoy": -2.1, "semi_inv_yoy": 8.99}, {"month": "2018-12", "semi_prod": 82.92, "nonsemi_prod": 105.61, "semi_prod_ma12": 82.8, "nonsemi_prod_ma12": 104.79, "semi_prod_yoy": 5.86, "nonsemi_prod_yoy": -0.2, "semi_inv_yoy": 6.87}, {"month": "2019-01", "semi_prod": 73.45, "nonsemi_prod": 105.72, "semi_prod_ma12": 82.8, "nonsemi_prod_ma12": 104.79, "semi_prod_yoy": -0.08, "nonsemi_prod_yoy": 0.0, "semi_inv_yoy": -0.09}, {"month": "2019-02", "semi_prod": 67.93, "nonsemi_prod": 87.71, "semi_prod_ma12": 82.73, "nonsemi_prod_ma12": 104.47, "semi_prod_yoy": -1.1, "nonsemi_prod_yoy": -4.28, "semi_inv_yoy": 4.04}, {"month": "2019-03", "semi_prod": 77.16, "nonsemi_prod": 106.25, "semi_prod_ma12": 82.51, "nonsemi_prod_ma12": 104.29, "semi_prod_yoy": -3.35, "nonsemi_prod_yoy": -1.96, "semi_inv_yoy": -16.87}, {"month": "2019-04", "semi_prod": 78.56, "nonsemi_prod": 107.73, "semi_prod_ma12": 82.36, "nonsemi_prod_ma12": 104.39, "semi_prod_yoy": -2.24, "nonsemi_prod_yoy": 1.09, "semi_inv_yoy": -5.06}, {"month": "2019-05", "semi_prod": 84.6, "nonsemi_prod": 107.84, "semi_prod_ma12": 82.85, "nonsemi_prod_ma12": 104.31, "semi_prod_yoy": 7.53, "nonsemi_prod_yoy": -0.88, "semi_inv_yoy": 0.72}, {"month": "2019-06", "semi_prod": 90.06, "nonsemi_prod": 102.22, "semi_prod_ma12": 83.14, "nonsemi_prod_ma12": 103.97, "semi_prod_yoy": 3.96, "nonsemi_prod_yoy": -3.79, "semi_inv_yoy": -8.66}, {"month": "2019-07", "semi_prod": 91.63, "nonsemi_prod": 107.63, "semi_prod_ma12": 83.24, "nonsemi_prod_ma12": 104.22, "semi_prod_yoy": 1.35, "nonsemi_prod_yoy": 2.83, "semi_inv_yoy": 3.21}, {"month": "2019-08", "semi_prod": 91.4, "nonsemi_prod": 97.99, "semi_prod_ma12": 83.59, "nonsemi_prod_ma12": 103.89, "semi_prod_yoy": 4.8, "nonsemi_prod_yoy": -3.85, "semi_inv_yoy": 3.83}, {"month": "2019-09", "semi_prod": 94.83, "nonsemi_prod": 99.15, "semi_prod_ma12": 84.09, "nonsemi_prod_ma12": 103.94, "semi_prod_yoy": 6.81, "nonsemi_prod_yoy": 0.54, "semi_inv_yoy": -5.74}, {"month": "2019-10", "semi_prod": 97.5, "nonsemi_prod": 108.05, "semi_prod_ma12": 84.53, "nonsemi_prod_ma12": 103.73, "semi_prod_yoy": 5.67, "nonsemi_prod_yoy": -2.21, "semi_inv_yoy": -4.15}, {"month": "2019-11", "semi_prod": 101.16, "nonsemi_prod": 105.3, "semi_prod_ma12": 85.93, "nonsemi_prod_ma12": 103.43, "semi_prod_yoy": 19.99, "nonsemi_prod_yoy": -3.31, "semi_inv_yoy": -6.35}, {"month": "2019-12", "semi_prod": 102.27, "nonsemi_prod": 108.58, "semi_prod_ma12": 87.55, "nonsemi_prod_ma12": 103.68, "semi_prod_yoy": 23.34, "nonsemi_prod_yoy": 2.81, "semi_inv_yoy": -16.5}, {"month": "2020-01", "semi_prod": 86.6, "nonsemi_prod": 95.6, "semi_prod_ma12": 88.64, "nonsemi_prod_ma12": 102.84, "semi_prod_yoy": 17.91, "nonsemi_prod_yoy": -9.57, "semi_inv_yoy": -0.76}, {"month": "2020-02", "semi_prod": 85.6, "nonsemi_prod": 93.2, "semi_prod_ma12": 90.11, "nonsemi_prod_ma12": 103.3, "semi_prod_yoy": 26.02, "nonsemi_prod_yoy": 6.26, "semi_inv_yoy": -7.55}, {"month": "2020-03", "semi_prod": 98.7, "nonsemi_prod": 108.0, "semi_prod_ma12": 91.91, "nonsemi_prod_ma12": 103.44, "semi_prod_yoy": 27.91, "nonsemi_prod_yoy": 1.65, "semi_inv_yoy": -4.92}, {"month": "2020-04", "semi_prod": 86.7, "nonsemi_prod": 98.2, "semi_prod_ma12": 92.59, "nonsemi_prod_ma12": 102.65, "semi_prod_yoy": 10.36, "nonsemi_prod_yoy": -8.85, "semi_inv_yoy": -18.96}, {"month": "2020-05", "semi_prod": 95.4, "nonsemi_prod": 90.5, "semi_prod_ma12": 93.49, "nonsemi_prod_ma12": 101.2, "semi_prod_yoy": 12.76, "nonsemi_prod_yoy": -16.08, "semi_inv_yoy": -11.46}, {"month": "2020-06", "semi_prod": 103.5, "nonsemi_prod": 98.1, "semi_prod_ma12": 94.61, "nonsemi_prod_ma12": 100.86, "semi_prod_yoy": 14.92, "nonsemi_prod_yoy": -4.04, "semi_inv_yoy": 2.93}, {"month": "2020-07", "semi_prod": 97.8, "nonsemi_prod": 102.0, "semi_prod_ma12": 95.12, "nonsemi_prod_ma12": 100.39, "semi_prod_yoy": 6.73, "nonsemi_prod_yoy": -5.23, "semi_inv_yoy": -4.51}, {"month": "2020-08", "semi_prod": 102.1, "nonsemi_prod": 91.3, "semi_prod_ma12": 96.01, "nonsemi_prod_ma12": 99.83, "semi_prod_yoy": 11.71, "nonsemi_prod_yoy": -6.82, "semi_inv_yoy": 4.0}, {"month": "2020-09", "semi_prod": 112.3, "nonsemi_prod": 105.6, "semi_prod_ma12": 97.47, "nonsemi_prod_ma12": 100.37, "semi_prod_yoy": 18.42, "nonsemi_prod_yoy": 6.5, "semi_inv_yoy": 7.15}, {"month": "2020-10", "semi_prod": 105.0, "nonsemi_prod": 102.5, "semi_prod_ma12": 98.09, "nonsemi_prod_ma12": 99.91, "semi_prod_yoy": 7.69, "nonsemi_prod_yoy": -5.14, "semi_inv_yoy": -1.5}, {"month": "2020-11", "semi_prod": 110.3, "nonsemi_prod": 104.9, "semi_prod_ma12": 98.86, "nonsemi_prod_ma12": 99.87, "semi_prod_yoy": 9.03, "nonsemi_prod_yoy": -0.38, "semi_inv_yoy": -7.21}, {"month": "2020-12", "semi_prod": 115.9, "nonsemi_prod": 109.9, "semi_prod_ma12": 99.99, "nonsemi_prod_ma12": 99.98, "semi_prod_yoy": 13.33, "nonsemi_prod_yoy": 1.22, "semi_inv_yoy": 2.12}, {"month": "2021-01", "semi_prod": 103.4, "nonsemi_prod": 102.8, "semi_prod_ma12": 101.39, "nonsemi_prod_ma12": 100.58, "semi_prod_yoy": 19.4, "nonsemi_prod_yoy": 7.53, "semi_inv_yoy": -0.28}, {"month": "2021-02", "semi_prod": 100.4, "nonsemi_prod": 93.7, "semi_prod_ma12": 102.62, "nonsemi_prod_ma12": 100.62, "semi_prod_yoy": 17.29, "nonsemi_prod_yoy": 0.54, "semi_inv_yoy": 1.79}, {"month": "2021-03", "semi_prod": 114.2, "nonsemi_prod": 112.0, "semi_prod_ma12": 103.92, "nonsemi_prod_ma12": 100.96, "semi_prod_yoy": 15.7, "nonsemi_prod_yoy": 3.7, "semi_inv_yoy": 12.11}, {"month": "2021-04", "semi_prod": 102.1, "nonsemi_prod": 109.0, "semi_prod_ma12": 105.2, "nonsemi_prod_ma12": 101.86, "semi_prod_yoy": 17.76, "nonsemi_prod_yoy": 11.0, "semi_inv_yoy": 10.42}, {"month": "2021-05", "semi_prod": 111.0, "nonsemi_prod": 103.3, "semi_prod_ma12": 106.5, "nonsemi_prod_ma12": 102.92, "semi_prod_yoy": 16.35, "nonsemi_prod_yoy": 14.14, "semi_inv_yoy": -4.89}, {"month": "2021-06", "semi_prod": 118.8, "nonsemi_prod": 109.4, "semi_prod_ma12": 107.78, "nonsemi_prod_ma12": 103.87, "semi_prod_yoy": 14.78, "nonsemi_prod_yoy": 11.52, "semi_inv_yoy": -19.88}, {"month": "2021-07", "semi_prod": 122.7, "nonsemi_prod": 107.0, "semi_prod_ma12": 109.85, "nonsemi_prod_ma12": 104.28, "semi_prod_yoy": 25.46, "nonsemi_prod_yoy": 4.9, "semi_inv_yoy": -14.48}, {"month": "2021-08", "semi_prod": 128.5, "nonsemi_prod": 98.0, "semi_prod_ma12": 112.05, "nonsemi_prod_ma12": 104.84, "semi_prod_yoy": 25.86, "nonsemi_prod_yoy": 7.34, "semi_inv_yoy": -10.39}, {"month": "2021-09", "semi_prod": 132.4, "nonsemi_prod": 99.5, "semi_prod_ma12": 113.72, "nonsemi_prod_ma12": 104.33, "semi_prod_yoy": 17.9, "nonsemi_prod_yoy": -5.78, "semi_inv_yoy": 4.14}, {"month": "2021-10", "semi_prod": 131.5, "nonsemi_prod": 103.2, "semi_prod_ma12": 115.93, "nonsemi_prod_ma12": 104.39, "semi_prod_yoy": 25.24, "nonsemi_prod_yoy": 0.68, "semi_inv_yoy": 27.03}, {"month": "2021-11", "semi_prod": 133.5, "nonsemi_prod": 108.4, "semi_prod_ma12": 117.87, "nonsemi_prod_ma12": 104.68, "semi_prod_yoy": 21.03, "nonsemi_prod_yoy": 3.34, "semi_inv_yoy": 24.66}, {"month": "2021-12", "semi_prod": 144.9, "nonsemi_prod": 115.5, "semi_prod_ma12": 120.28, "nonsemi_prod_ma12": 105.15, "semi_prod_yoy": 25.02, "nonsemi_prod_yoy": 5.1, "semi_inv_yoy": 22.24}, {"month": "2022-01", "semi_prod": 129.3, "nonsemi_prod": 103.6, "semi_prod_ma12": 122.44, "nonsemi_prod_ma12": 105.22, "semi_prod_yoy": 25.05, "nonsemi_prod_yoy": 0.78, "semi_inv_yoy": 22.4}, {"month": "2022-02", "semi_prod": 123.7, "nonsemi_prod": 95.5, "semi_prod_ma12": 124.38, "nonsemi_prod_ma12": 105.37, "semi_prod_yoy": 23.21, "nonsemi_prod_yoy": 1.92, "semi_inv_yoy": 27.62}, {"month": "2022-03", "semi_prod": 141.2, "nonsemi_prod": 111.3, "semi_prod_ma12": 126.63, "nonsemi_prod_ma12": 105.31, "semi_prod_yoy": 23.64, "nonsemi_prod_yoy": -0.62, "semi_inv_yoy": 14.17}, {"month": "2022-04", "semi_prod": 128.2, "nonsemi_prod": 108.5, "semi_prod_ma12": 128.81, "nonsemi_prod_ma12": 105.27, "semi_prod_yoy": 25.56, "nonsemi_prod_yoy": -0.46, "semi_inv_yoy": 24.9}, {"month": "2022-05", "semi_prod": 131.4, "nonsemi_prod": 109.4, "semi_prod_ma12": 130.51, "nonsemi_prod_ma12": 105.78, "semi_prod_yoy": 18.38, "nonsemi_prod_yoy": 5.91, "semi_inv_yoy": 31.51}, {"month": "2022-06", "semi_prod": 135.1, "nonsemi_prod": 108.1, "semi_prod_ma12": 131.87, "nonsemi_prod_ma12": 105.67, "semi_prod_yoy": 13.72, "nonsemi_prod_yoy": -1.19, "semi_inv_yoy": 51.98}, {"month": "2022-07", "semi_prod": 122.8, "nonsemi_prod": 107.8, "semi_prod_ma12": 131.88, "nonsemi_prod_ma12": 105.73, "semi_prod_yoy": 0.08, "nonsemi_prod_yoy": 0.75, "semi_inv_yoy": 53.79}, {"month": "2022-08", "semi_prod": 111.6, "nonsemi_prod": 102.6, "semi_prod_ma12": 130.47, "nonsemi_prod_ma12": 106.12, "semi_prod_yoy": -13.15, "nonsemi_prod_yoy": 4.69, "semi_inv_yoy": 35.87}, {"month": "2022-09", "semi_prod": 112.1, "nonsemi_prod": 103.4, "semi_prod_ma12": 128.78, "nonsemi_prod_ma12": 106.44, "semi_prod_yoy": -15.33, "nonsemi_prod_yoy": 3.92, "semi_inv_yoy": 18.37}, {"month": "2022-10", "semi_prod": 111.2, "nonsemi_prod": 105.0, "semi_prod_ma12": 127.08, "nonsemi_prod_ma12": 106.59, "semi_prod_yoy": -15.44, "nonsemi_prod_yoy": 1.74, "semi_inv_yoy": 5.9}, {"month": "2022-11", "semi_prod": 103.4, "nonsemi_prod": 109.7, "semi_prod_ma12": 124.58, "nonsemi_prod_ma12": 106.7, "semi_prod_yoy": -22.55, "nonsemi_prod_yoy": 1.2, "semi_inv_yoy": 16.23}, {"month": "2022-12", "semi_prod": 104.4, "nonsemi_prod": 110.4, "semi_prod_ma12": 121.2, "nonsemi_prod_ma12": 106.28, "semi_prod_yoy": -27.95, "nonsemi_prod_yoy": -4.42, "semi_inv_yoy": 6.8}, {"month": "2023-01", "semi_prod": 86.1, "nonsemi_prod": 97.6, "semi_prod_ma12": 117.6, "nonsemi_prod_ma12": 105.78, "semi_prod_yoy": -33.41, "nonsemi_prod_yoy": -5.79, "semi_inv_yoy": 28.87}, {"month": "2023-02", "semi_prod": 77.2, "nonsemi_prod": 100.7, "semi_prod_ma12": 113.72, "nonsemi_prod_ma12": 106.21, "semi_prod_yoy": -37.59, "nonsemi_prod_yoy": 5.45, "semi_inv_yoy": 24.62}, {"month": "2023-03", "semi_prod": 106.1, "nonsemi_prod": 113.1, "semi_prod_ma12": 110.8, "nonsemi_prod_ma12": 106.36, "semi_prod_yoy": -24.86, "nonsemi_prod_yoy": 1.62, "semi_inv_yoy": 28.73}, {"month": "2023-04", "semi_prod": 98.8, "nonsemi_prod": 104.8, "semi_prod_ma12": 108.35, "nonsemi_prod_ma12": 106.05, "semi_prod_yoy": -22.93, "nonsemi_prod_yoy": -3.41, "semi_inv_yoy": 54.98}, {"month": "2023-05", "semi_prod": 111.2, "nonsemi_prod": 107.3, "semi_prod_ma12": 106.67, "nonsemi_prod_ma12": 105.88, "semi_prod_yoy": -15.37, "nonsemi_prod_yoy": -1.92, "semi_inv_yoy": 60.23}, {"month": "2023-06", "semi_prod": 117.0, "nonsemi_prod": 107.4, "semi_prod_ma12": 105.16, "nonsemi_prod_ma12": 105.82, "semi_prod_yoy": -13.4, "nonsemi_prod_yoy": -0.65, "semi_inv_yoy": 28.03}, {"month": "2023-07", "semi_prod": 107.9, "nonsemi_prod": 102.5, "semi_prod_ma12": 103.92, "nonsemi_prod_ma12": 105.38, "semi_prod_yoy": -12.13, "nonsemi_prod_yoy": -4.92, "semi_inv_yoy": 27.14}, {"month": "2023-08", "semi_prod": 124.4, "nonsemi_prod": 100.6, "semi_prod_ma12": 104.98, "nonsemi_prod_ma12": 105.21, "semi_prod_yoy": 11.47, "nonsemi_prod_yoy": -1.95, "semi_inv_yoy": 49.35}, {"month": "2023-09", "semi_prod": 138.1, "nonsemi_prod": 102.1, "semi_prod_ma12": 107.15, "nonsemi_prod_ma12": 105.1, "semi_prod_yoy": 23.19, "nonsemi_prod_yoy": -1.26, "semi_inv_yoy": 46.29}, {"month": "2023-10", "semi_prod": 126.2, "nonsemi_prod": 103.8, "semi_prod_ma12": 108.4, "nonsemi_prod_ma12": 105.0, "semi_prod_yoy": 13.49, "nonsemi_prod_yoy": -1.14, "semi_inv_yoy": 37.52}, {"month": "2023-11", "semi_prod": 133.9, "nonsemi_prod": 109.1, "semi_prod_ma12": 110.94, "nonsemi_prod_ma12": 104.95, "semi_prod_yoy": 29.5, "nonsemi_prod_yoy": -0.55, "semi_inv_yoy": 29.82}, {"month": "2023-12", "semi_prod": 141.2, "nonsemi_prod": 108.5, "semi_prod_ma12": 114.01, "nonsemi_prod_ma12": 104.79, "semi_prod_yoy": 35.25, "nonsemi_prod_yoy": -1.72, "semi_inv_yoy": 5.91}, {"month": "2024-01", "semi_prod": 115.2, "nonsemi_prod": 105.9, "semi_prod_ma12": 116.43, "nonsemi_prod_ma12": 105.48, "semi_prod_yoy": 33.8, "nonsemi_prod_yoy": 8.5, "semi_inv_yoy": -21.33}, {"month": "2024-02", "semi_prod": 116.8, "nonsemi_prod": 94.7, "semi_prod_ma12": 119.73, "nonsemi_prod_ma12": 104.98, "semi_prod_yoy": 51.3, "nonsemi_prod_yoy": -5.96, "semi_inv_yoy": -23.31}, {"month": "2024-03", "semi_prod": 132.5, "nonsemi_prod": 106.9, "semi_prod_ma12": 121.93, "nonsemi_prod_ma12": 104.47, "semi_prod_yoy": 24.88, "nonsemi_prod_yoy": -5.48, "semi_inv_yoy": -15.44}, {"month": "2024-04", "semi_prod": 119.8, "nonsemi_prod": 108.9, "semi_prod_ma12": 123.68, "nonsemi_prod_ma12": 104.81, "semi_prod_yoy": 21.25, "nonsemi_prod_yoy": 3.91, "semi_inv_yoy": -27.33}, {"month": "2024-05", "semi_prod": 130.6, "nonsemi_prod": 109.3, "semi_prod_ma12": 125.3, "nonsemi_prod_ma12": 104.97, "semi_prod_yoy": 17.45, "nonsemi_prod_yoy": 1.86, "semi_inv_yoy": -30.98}, {"month": "2024-06", "semi_prod": 142.8, "nonsemi_prod": 105.9, "semi_prod_ma12": 127.45, "nonsemi_prod_ma12": 104.85, "semi_prod_yoy": 22.05, "nonsemi_prod_yoy": -1.4, "semi_inv_yoy": -27.48}, {"month": "2024-07", "semi_prod": 127.6, "nonsemi_prod": 104.3, "semi_prod_ma12": 129.09, "nonsemi_prod_ma12": 105.0, "semi_prod_yoy": 18.26, "nonsemi_prod_yoy": 1.76, "semi_inv_yoy": -23.16}, {"month": "2024-08", "semi_prod": 138.4, "nonsemi_prod": 103.4, "semi_prod_ma12": 130.26, "nonsemi_prod_ma12": 105.23, "semi_prod_yoy": 11.25, "nonsemi_prod_yoy": 2.78, "semi_inv_yoy": -27.57}, {"month": "2024-09", "semi_prod": 137.8, "nonsemi_prod": 101.4, "semi_prod_ma12": 130.23, "nonsemi_prod_ma12": 105.17, "semi_prod_yoy": -0.22, "nonsemi_prod_yoy": -0.69, "semi_inv_yoy": -35.47}, {"month": "2024-10", "semi_prod": 144.6, "nonsemi_prod": 109.7, "semi_prod_ma12": 131.77, "nonsemi_prod_ma12": 105.67, "semi_prod_yoy": 14.58, "nonsemi_prod_yoy": 5.68, "semi_inv_yoy": -17.07}, {"month": "2024-11", "semi_prod": 146.0, "nonsemi_prod": 107.8, "semi_prod_ma12": 132.78, "nonsemi_prod_ma12": 105.56, "semi_prod_yoy": 9.04, "nonsemi_prod_yoy": -1.19, "semi_inv_yoy": -14.51}, {"month": "2024-12", "semi_prod": 158.6, "nonsemi_prod": 113.8, "semi_prod_ma12": 134.22, "nonsemi_prod_ma12": 106.0, "semi_prod_yoy": 12.32, "nonsemi_prod_yoy": 4.88, "semi_inv_yoy": -16.59}, {"month": "2025-01", "semi_prod": 131.7, "nonsemi_prod": 96.8, "semi_prod_ma12": 135.6, "nonsemi_prod_ma12": 105.24, "semi_prod_yoy": 14.32, "nonsemi_prod_yoy": -8.59, "semi_inv_yoy": -1.74}, {"month": "2025-02", "semi_prod": 123.0, "nonsemi_prod": 101.5, "semi_prod_ma12": 136.12, "nonsemi_prod_ma12": 105.81, "semi_prod_yoy": 5.31, "nonsemi_prod_yoy": 7.18, "semi_inv_yoy": -6.46}, {"month": "2025-03", "semi_prod": 154.7, "nonsemi_prod": 109.8, "semi_prod_ma12": 137.97, "nonsemi_prod_ma12": 106.05, "semi_prod_yoy": 16.75, "nonsemi_prod_yoy": 2.71, "semi_inv_yoy": -21.29}, {"month": "2025-04", "semi_prod": 135.9, "nonsemi_prod": 113.0, "semi_prod_ma12": 139.31, "nonsemi_prod_ma12": 106.39, "semi_prod_yoy": 13.44, "nonsemi_prod_yoy": 3.77, "semi_inv_yoy": -21.31}, {"month": "2025-05", "semi_prod": 147.1, "nonsemi_prod": 106.8, "semi_prod_ma12": 140.68, "nonsemi_prod_ma12": 106.18, "semi_prod_yoy": 12.63, "nonsemi_prod_yoy": -2.29, "semi_inv_yoy": -25.94}, {"month": "2025-06", "semi_prod": 158.4, "nonsemi_prod": 107.7, "semi_prod_ma12": 141.98, "nonsemi_prod_ma12": 106.33, "semi_prod_yoy": 10.92, "nonsemi_prod_yoy": 1.7, "semi_inv_yoy": -23.18}, {"month": "2025-07", "semi_prod": 151.6, "nonsemi_prod": 107.8, "semi_prod_ma12": 143.98, "nonsemi_prod_ma12": 106.62, "semi_prod_yoy": 18.81, "nonsemi_prod_yoy": 3.36, "semi_inv_yoy": -31.65}, {"month": "2025-08", "semi_prod": 154.9, "nonsemi_prod": 102.3, "semi_prod_ma12": 145.36, "nonsemi_prod_ma12": 106.53, "semi_prod_yoy": 11.92, "nonsemi_prod_yoy": -1.06, "semi_inv_yoy": -36.74}, {"month": "2025-09", "semi_prod": 178.6, "nonsemi_prod": 111.6, "semi_prod_ma12": 148.76, "nonsemi_prod_ma12": 107.38, "semi_prod_yoy": 29.61, "nonsemi_prod_yoy": 10.06, "semi_inv_yoy": -21.19}, {"month": "2025-10", "semi_prod": 141.4, "nonsemi_prod": 99.2, "semi_prod_ma12": 148.49, "nonsemi_prod_ma12": 106.51, "semi_prod_yoy": -2.21, "nonsemi_prod_yoy": -9.57, "semi_inv_yoy": -35.72}, {"month": "2025-11", "semi_prod": 149.6, "nonsemi_prod": 106.7, "semi_prod_ma12": 148.79, "nonsemi_prod_ma12": 106.42, "semi_prod_yoy": 2.47, "nonsemi_prod_yoy": -1.02, "semi_inv_yoy": -41.09}, {"month": "2025-12", "semi_prod": 161.2, "nonsemi_prod": 115.3, "semi_prod_ma12": 149.01, "nonsemi_prod_ma12": 106.54, "semi_prod_yoy": 1.64, "nonsemi_prod_yoy": 1.32, "semi_inv_yoy": -25.46}, {"month": "2026-01", "semi_prod": 130.1, "nonsemi_prod": 105.8, "semi_prod_ma12": 148.88, "nonsemi_prod_ma12": 107.29, "semi_prod_yoy": -1.22, "nonsemi_prod_yoy": 9.3, "semi_inv_yoy": -25.98}, {"month": "2026-02", "semi_prod": 150.6, "nonsemi_prod": 92.4, "semi_prod_ma12": 151.18, "nonsemi_prod_ma12": 106.53, "semi_prod_yoy": 22.44, "nonsemi_prod_yoy": -8.97, "semi_inv_yoy": -5.85}, {"month": "2026-03", "semi_prod": 165.4, "nonsemi_prod": 113.5, "semi_prod_ma12": 152.07, "nonsemi_prod_ma12": 106.84, "semi_prod_yoy": 6.92, "nonsemi_prod_yoy": 3.37, "semi_inv_yoy": -13.78}, {"month": "2026-04", "semi_prod": 151.1, "nonsemi_prod": 111.1, "semi_prod_ma12": 153.33, "nonsemi_prod_ma12": 106.68, "semi_prod_yoy": 11.19, "nonsemi_prod_yoy": -1.68, "semi_inv_yoy": -9.0}, {"month": "2026-05", "semi_prod": 148.7, "nonsemi_prod": 104.7, "semi_prod_ma12": 153.47, "nonsemi_prod_ma12": 106.51, "semi_prod_yoy": 1.09, "nonsemi_prod_yoy": -1.97, "semi_inv_yoy": -2.98}, {"month": "2026-06", "semi_prod": 162.8, "nonsemi_prod": 115.8, "semi_prod_ma12": 153.83, "nonsemi_prod_ma12": 107.18, "semi_prod_yoy": 2.78, "nonsemi_prod_yoy": 7.52, "semi_inv_yoy": 2.51}, {"month": "2026-07", "semi_prod": 154.6, "nonsemi_prod": 112.8, "semi_prod_ma12": 154.08, "nonsemi_prod_ma12": 107.6, "semi_prod_yoy": 1.98, "nonsemi_prod_yoy": 4.64, "semi_inv_yoy": 10.92}];
+const PHASES = [{"name": "① 슈퍼사이클", "s": "2017-01", "e": "2018-12"}, {"name": "② 다운사이클", "s": "2019-01", "e": "2019-12"}, {"name": "③ 코로나", "s": "2020-01", "e": "2020-12"}, {"name": "④ 비대면 특수", "s": "2021-01", "e": "2022-06"}, {"name": "⑤ 불황", "s": "2022-07", "e": "2023-06"}, {"name": "⑥ 회복", "s": "2023-07", "e": "2024-12"}, {"name": "⑦ AI·HBM 호황", "s": "2025-01", "e": "2026-07"}];
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const months = DATA.map(d => d.month);
+const startSel = document.getElementById('start'), endSel = document.getElementById('end'), metricSel = document.getElementById('metric');
+months.forEach(m => { startSel.add(new Option(m, m)); endSel.add(new Option(m, m)); });
+startSel.value = months[0]; endSel.value = months[months.length - 1];
+
+const presets = [{ name: '전체', s: months[0], e: months[months.length - 1] }, ...PHASES];
+const presetBox = document.getElementById('presets');
+presets.forEach(p => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = p.name; b.dataset.s = p.s; b.dataset.e = p.e;
+  b.onclick = () => { startSel.value = p.s; endSel.value = p.e; render(); };
+  presetBox.appendChild(b);
+});
+
+const mean = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+const std = a => { const v = a.filter(x => x != null), m = mean(v); return v.length > 1 ? Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / (v.length - 1)) : null; };
+function corr(a, b) {
+  const p = a.map((x, i) => [x, b[i]]).filter(([x, y]) => x != null && y != null);
+  if (p.length < 3) return null;
+  const mx = mean(p.map(q => q[0])), my = mean(p.map(q => q[1]));
+  let sxy = 0, sx = 0, sy = 0;
+  p.forEach(([x, y]) => { sxy += (x - mx) * (y - my); sx += (x - mx) ** 2; sy += (y - my) ** 2; });
+  return sxy / Math.sqrt(sx * sy);
+}
+const fmt = (v, d = 1, sign = false) => v == null || isNaN(v) ? '–' : (sign && v > 0 ? '+' : '') + v.toFixed(d);
+
+function layout(yTitle, zero) {
+  const shapes = zero ? [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0, line: { color: css('--text2'), width: 1 } }] : [];
+  return {
+    margin: { l: 52, r: 14, t: 16, b: 36 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Malgun Gothic, Apple SD Gothic Neo, sans-serif', color: css('--text2'), size: 12 },
+    xaxis: { gridcolor: css('--grid'), showspikes: true, spikemode: 'across', spikethickness: 1, spikecolor: css('--muted'), spikedash: 'solid' },
+    yaxis: { title: { text: yTitle, font: { size: 11 } }, gridcolor: css('--grid'), zeroline: false },
+    legend: { orientation: 'h', y: 1.12, x: 0 }, hovermode: 'x unified', shapes,
+    hoverlabel: { bgcolor: css('--card'), bordercolor: css('--border'), font: { color: css('--text') } },
+  };
+}
+const line = (x, y, name, color, extra = {}) => ({ x, y, name, type: 'scatter', mode: 'lines', line: { color, width: 2 }, hovertemplate: '%{y:.1f}', ...extra });
+
+function render() {
+  let s = startSel.value, e = endSel.value;
+  if (s > e) [s, e] = [e, s];
+  document.querySelectorAll('#presets button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === s && b.dataset.e === e));
+  const rows = DATA.filter(d => d.month >= s && d.month <= e);
+  const x = rows.map(d => d.month + '-01');
+  const col = k => rows.map(d => d[k]);
+  const SEMI = css('--semi'), NON = css('--non'), INV = css('--inv');
+
+  const first = rows[0], last = rows[rows.length - 1];
+  // 시작·끝 달 모두 12개월 이동평균이 있으면 그것으로(계절 요동 제거), 없으면 원지수로 비교
+  const firstMa = rows.find(r => r.semi_prod_ma12 != null);
+  const useMa = firstMa && firstMa !== last;
+  const from = useMa ? firstMa : first;
+  const basis = useMa ? '12개월 이동평균' : '원지수';
+  const chg = k => { const kk = useMa ? k + '_ma12' : k; return from && last ? (last[kk] / from[kk] - 1) * 100 : null; };
+  const k = [
+    ['기간 중 반도체 생산 변화', fmt(chg('semi_prod'), 1, true) + '%', `${from.month} → ${e} ${basis}`, SEMI],
+    ['기간 중 비반도체 생산 변화', fmt(chg('nonsemi_prod'), 1, true) + '%', `${from.month} → ${e} ${basis}`, NON],
+    ['반도체 평균 증가율(YoY)', fmt(mean(col('semi_prod_yoy')), 1, true) + '%', `변동성(σ) ${fmt(std(col('semi_prod_yoy')))}%p`, SEMI],
+    ['비반도체 평균 증가율(YoY)', fmt(mean(col('nonsemi_prod_yoy')), 1, true) + '%', `변동성(σ) ${fmt(std(col('nonsemi_prod_yoy')))}%p`, NON],
+    ['두 산업 증가율 상관계수', fmt(corr(col('semi_prod_yoy'), col('nonsemi_prod_yoy')), 2), '1에 가까울수록 같이 움직임', null],
+  ];
+  document.getElementById('kpis').innerHTML = k.map(([t, v, n, c]) =>
+    `<div class="kpi"><div class="k">${c ? `<span class="dot" style="background:${c}"></span>` : ''}${t}</div><div class="v">${v}</div><div class="n">${n} · ${rows.length}개월</div></div>`).join('');
+
+  const m = metricSel.value === 'ma12' ? '_ma12' : '';
+  const cfg = { displayModeBar: false, responsive: true };
+  Plotly.react('c1', [
+    line(x, col('semi_prod' + m), '반도체 및 부품', SEMI),
+    line(x, col('nonsemi_prod' + m), '반도체 제외 제조업', NON),
+  ], layout('생산지수 (2020=100)'), cfg);
+  Plotly.react('c2', [
+    line(x, col('semi_prod_yoy'), '반도체 및 부품', SEMI),
+    line(x, col('nonsemi_prod_yoy'), '반도체 제외 제조업', NON),
+  ], layout('전년동월대비 (%)', true), cfg);
+  Plotly.react('c3', [
+    line(x, col('semi_prod_yoy'), '반도체 생산 증가율', SEMI),
+    line(x, col('semi_inv_yoy'), '반도체 재고 증가율', INV),
+  ], layout('전년동월대비 (%)', true), cfg);
+}
+[startSel, endSel, metricSel].forEach(el => el.addEventListener('change', render));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>반도체 K자형 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb; --card: #ffffff; --border: #e4e3df;
+  --text: #0b0b0b; --text2: #52514e; --muted: #8a8984; --grid: #ecebe7;
+  --semi: #2a78d6; --non: #eb6834; --inv: #1baf7a; --band: #f1f0ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19; --card: #222220; --border: #3a3936;
+    --text: #f0efec; --text2: #c3c2b7; --muted: #8f8e88; --grid: #2f2e2b;
+    --semi: #3987e5; --non: #d95926; --inv: #199e70; --band: #2a2927;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --card: #222220; --border: #3a3936;
+  --text: #f0efec; --text2: #c3c2b7; --muted: #8f8e88; --grid: #2f2e2b;
+  --semi: #3987e5; --non: #d95926; --inv: #199e70; --band: #2a2927;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 1.5rem; margin: 0 0 4px; }
+.sub { color: var(--text2); margin: 0 0 20px; font-size: .92rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.controls label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--text2); }
+select { font: inherit; font-size: .9rem; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets button { font: inherit; font-size: .8rem; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text2); cursor: pointer; }
+.presets button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+.kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.kpi .k { font-size: .78rem; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+.kpi .v { font-size: 1.45rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi .n { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px 4px; margin-bottom: 14px; }
+.card h2 { font-size: 1rem; margin: 4px 10px 0; }
+.card p { font-size: .8rem; color: var(--text2); margin: 2px 10px 0; }
+.chart { width: 100%; height: 360px; }
+footer { font-size: .78rem; color: var(--muted); margin-top: 18px; line-height: 1.6; }
+footer a { color: var(--text2); }
+@media (max-width: 600px) { .chart { height: 300px; } h1 { font-size: 1.25rem; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>반도체만 날았나? — 제조업 K자형 대시보드</h1>
+  <p class="sub">반도체 및 부품(C26A) vs 반도체 제외 제조업 · 광공업생산지수(2020=100) · 2017.01~2026.07 월별</p>
+
+  <section class="controls" aria-label="필터">
+    <label>시작 월 <select id="start"></select></label>
+    <label>끝 월 <select id="end"></select></label>
+    <label>추세 그래프 지표
+      <select id="metric">
+        <option value="ma12">12개월 이동평균</option>
+        <option value="raw">원지수(월별)</option>
+      </select>
+    </label>
+    <div>
+      <div style="font-size:.8rem;color:var(--text2);margin-bottom:4px">국면 바로가기</div>
+      <div class="presets" id="presets"></div>
+    </div>
+  </section>
+
+  <section class="kpis" id="kpis" aria-live="polite"></section>
+
+  <div class="card"><h2>생산지수 추세</h2><p>선택 기간의 생산 수준. 두 선의 거리가 K자형 격차다.</p><div class="chart" id="c1"></div></div>
+  <div class="card"><h2>전년동월대비 생산 증가율</h2><p>계절성을 뺀 성장 속도. 0% 선 아래는 1년 전보다 줄었다는 뜻.</p><div class="chart" id="c2"></div></div>
+  <div class="card"><h2>반도체 생산 vs 재고 증가율</h2><p>재고가 급증하고 생산이 꺾이는 시기를 찾아보세요 (예: 2022년).</p><div class="chart" id="c3"></div></div>
+
+  <footer>
+    자료: 통계청 KOSIS 광업제조업동향조사 「기타분류별 광공업생산지수(2020=100)」, 2026.06·07은 잠정치.
+    상관계수는 같은 달 기준이며 인과관계를 뜻하지 않는다. 분석 리포트는 GitHub 저장소의 REPORT.md를 참고.
+  </footer>
+</main>
+<script>
+const DATA = __DATA__;
+const PHASES = __PHASES__;
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const months = DATA.map(d => d.month);
+const startSel = document.getElementById('start'), endSel = document.getElementById('end'), metricSel = document.getElementById('metric');
+months.forEach(m => { startSel.add(new Option(m, m)); endSel.add(new Option(m, m)); });
+startSel.value = months[0]; endSel.value = months[months.length - 1];
+
+const presets = [{ name: '전체', s: months[0], e: months[months.length - 1] }, ...PHASES];
+const presetBox = document.getElementById('presets');
+presets.forEach(p => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = p.name; b.dataset.s = p.s; b.dataset.e = p.e;
+  b.onclick = () => { startSel.value = p.s; endSel.value = p.e; render(); };
+  presetBox.appendChild(b);
+});
+
+const mean = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+const std = a => { const v = a.filter(x => x != null), m = mean(v); return v.length > 1 ? Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / (v.length - 1)) : null; };
+function corr(a, b) {
+  const p = a.map((x, i) => [x, b[i]]).filter(([x, y]) => x != null && y != null);
+  if (p.length < 3) return null;
+  const mx = mean(p.map(q => q[0])), my = mean(p.map(q => q[1]));
+  let sxy = 0, sx = 0, sy = 0;
+  p.forEach(([x, y]) => { sxy += (x - mx) * (y - my); sx += (x - mx) ** 2; sy += (y - my) ** 2; });
+  return sxy / Math.sqrt(sx * sy);
+}
+const fmt = (v, d = 1, sign = false) => v == null || isNaN(v) ? '–' : (sign && v > 0 ? '+' : '') + v.toFixed(d);
+
+function layout(yTitle, zero) {
+  const shapes = zero ? [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0, line: { color: css('--text2'), width: 1 } }] : [];
+  return {
+    margin: { l: 52, r: 14, t: 16, b: 36 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Malgun Gothic, Apple SD Gothic Neo, sans-serif', color: css('--text2'), size: 12 },
+    xaxis: { gridcolor: css('--grid'), showspikes: true, spikemode: 'across', spikethickness: 1, spikecolor: css('--muted'), spikedash: 'solid' },
+    yaxis: { title: { text: yTitle, font: { size: 11 } }, gridcolor: css('--grid'), zeroline: false },
+    legend: { orientation: 'h', y: 1.12, x: 0 }, hovermode: 'x unified', shapes,
+    hoverlabel: { bgcolor: css('--card'), bordercolor: css('--border'), font: { color: css('--text') } },
+  };
+}
+const line = (x, y, name, color, extra = {}) => ({ x, y, name, type: 'scatter', mode: 'lines', line: { color, width: 2 }, hovertemplate: '%{y:.1f}', ...extra });
+
+function render() {
+  let s = startSel.value, e = endSel.value;
+  if (s > e) [s, e] = [e, s];
+  document.querySelectorAll('#presets button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === s && b.dataset.e === e));
+  const rows = DATA.filter(d => d.month >= s && d.month <= e);
+  const x = rows.map(d => d.month + '-01');
+  const col = k => rows.map(d => d[k]);
+  const SEMI = css('--semi'), NON = css('--non'), INV = css('--inv');
+
+  const first = rows[0], last = rows[rows.length - 1];
+  // 시작·끝 달 모두 12개월 이동평균이 있으면 그것으로(계절 요동 제거), 없으면 원지수로 비교
+  const firstMa = rows.find(r => r.semi_prod_ma12 != null);
+  const useMa = firstMa && firstMa !== last;
+  const from = useMa ? firstMa : first;
+  const basis = useMa ? '12개월 이동평균' : '원지수';
+  const chg = k => { const kk = useMa ? k + '_ma12' : k; return from && last ? (last[kk] / from[kk] - 1) * 100 : null; };
+  const k = [
+    ['기간 중 반도체 생산 변화', fmt(chg('semi_prod'), 1, true) + '%', `${from.month} → ${e} ${basis}`, SEMI],
+    ['기간 중 비반도체 생산 변화', fmt(chg('nonsemi_prod'), 1, true) + '%', `${from.month} → ${e} ${basis}`, NON],
+    ['반도체 평균 증가율(YoY)', fmt(mean(col('semi_prod_yoy')), 1, true) + '%', `변동성(σ) ${fmt(std(col('semi_prod_yoy')))}%p`, SEMI],
+    ['비반도체 평균 증가율(YoY)', fmt(mean(col('nonsemi_prod_yoy')), 1, true) + '%', `변동성(σ) ${fmt(std(col('nonsemi_prod_yoy')))}%p`, NON],
+    ['두 산업 증가율 상관계수', fmt(corr(col('semi_prod_yoy'), col('nonsemi_prod_yoy')), 2), '1에 가까울수록 같이 움직임', null],
+  ];
+  document.getElementById('kpis').innerHTML = k.map(([t, v, n, c]) =>
+    `<div class="kpi"><div class="k">${c ? `<span class="dot" style="background:${c}"></span>` : ''}${t}</div><div class="v">${v}</div><div class="n">${n} · ${rows.length}개월</div></div>`).join('');
+
+  const m = metricSel.value === 'ma12' ? '_ma12' : '';
+  const cfg = { displayModeBar: false, responsive: true };
+  Plotly.react('c1', [
+    line(x, col('semi_prod' + m), '반도체 및 부품', SEMI),
+    line(x, col('nonsemi_prod' + m), '반도체 제외 제조업', NON),
+  ], layout('생산지수 (2020=100)'), cfg);
+  Plotly.react('c2', [
+    line(x, col('semi_prod_yoy'), '반도체 및 부품', SEMI),
+    line(x, col('nonsemi_prod_yoy'), '반도체 제외 제조업', NON),
+  ], layout('전년동월대비 (%)', true), cfg);
+  Plotly.react('c3', [
+    line(x, col('semi_prod_yoy'), '반도체 생산 증가율', SEMI),
+    line(x, col('semi_inv_yoy'), '반도체 재고 증가율', INV),
+  ], layout('전년동월대비 (%)', true), cfg);
+}
+[startSel, endSel, metricSel].forEach(el => el.addEventListener('change', render));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>
