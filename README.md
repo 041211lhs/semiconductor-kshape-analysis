@@ -18,8 +18,9 @@ semiconductor-kshape-analysis/
 ├─ data/
 │  ├─ raw/kosis_production_index_2017_2026.xlsx   KOSIS 원본(수정하지 않음)
 │  ├─ clean_production.csv                       정제·파생지표 (노트북이 생성)
-│  └─ phase_stats.csv                            국면별 통계 (노트북이 생성)
-├─ images/                                       그래프 01~07 + 대시보드 캡처 08
+│  ├─ phase_stats.csv                            국면별 통계 (노트북이 생성)
+│  └─ outliers.csv                               이상치 목록 (노트북이 생성)
+├─ images/                                       그래프 01 ~ 07, 09 + 대시보드 캡처 08
 ├─ analysis.ipynb                                분석 노트북
 ├─ dashboard/
 │  ├─ template.html                              대시보드 화면 틀
@@ -30,12 +31,33 @@ semiconductor-kshape-analysis/
 └─ requirements.txt
 ```
 
+## 저장소에 들어 있는 파일 목록
+
+**데이터 (`data/`)**
+
+- `raw/kosis_production_index_2017_2026.xlsx`: KOSIS 원본 엑셀 (수정하지 않음)
+- `clean_production.csv`: 정제 데이터, 115행 × 19열 (원지수 + 이동평균·증가율 등 파생지표)
+- `phase_stats.csv`: 7개 국면별 평균 증가율·표준편차
+- `outliers.csv`: 이상치 후보 목록 (2개)
+
+**그래프 (`images/`)**
+
+- `01_production_trend.png`: 같은 출발점(2017년 = 100) 추세 비교
+- `02_yoy_growth.png`: 전년동월대비 증가율
+- `03_phase_stats.png`: 국면별 평균 증가율·변동성
+- `04_inventory_cycle.png`: 반도체 재고와 생산
+- `05_lag_correlation.png`: 시차 상관
+- `06_decomposition.png`: STL 시계열 분해 (보너스)
+- `07_baseline_forecast.png`: 베이스라인 예측 (보너스)
+- `08_dashboard.png`: 대시보드 화면 캡처
+- `09_period_sensitivity.png`: 기간 민감도
+
 ## 실행 방법
 ```bash
 # 1) 라이브러리 설치 (Python 3.10 이상)
 pip install -r requirements.txt
 
-# 2) 노트북 실행 → data/clean_production.csv, images/01~07 생성
+# 2) 노트북 실행 → data/clean_production.csv, images/01 ~ 07, 09 생성
 jupyter nbconvert --to notebook --execute --inplace analysis.ipynb
 #    (또는 VS Code / Jupyter에서 analysis.ipynb를 열고 위에서부터 차례로 실행)
 
