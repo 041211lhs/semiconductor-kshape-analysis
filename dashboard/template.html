@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>반도체 K자형 대시보드</title>
+<title>반도체 독주 대시보드</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
 <style>
 :root {
@@ -54,7 +54,7 @@ footer a { color: var(--text2); }
 </head>
 <body>
 <main>
-  <h1>반도체만 날았나? — 제조업 K자형 대시보드</h1>
+  <h1>반도체만 날았나? — 반도체 vs 비반도체 제조업 대시보드</h1>
   <p class="sub">반도체 및 부품(C26A) vs 반도체 제외 제조업 · 광공업생산지수(2020=100) · 2017.01~2026.07 월별</p>
 
   <section class="controls" aria-label="필터">
@@ -74,7 +74,7 @@ footer a { color: var(--text2); }
 
   <section class="kpis" id="kpis" aria-live="polite"></section>
 
-  <div class="card"><h2>생산지수 추세</h2><p>선택 기간의 생산 수준. 두 선의 거리가 K자형 격차다.</p><div class="chart" id="c1"></div></div>
+  <div class="card"><h2>생산지수 추세</h2><p>선택 기간의 생산 수준. 두 선의 거리가 반도체와 나머지 제조업의 격차다.</p><div class="chart" id="c1"></div></div>
   <div class="card"><h2>전년동월대비 생산 증가율</h2><p>계절성을 뺀 성장 속도. 0% 선 아래는 1년 전보다 줄었다는 뜻.</p><div class="chart" id="c2"></div></div>
   <div class="card"><h2>반도체 생산 vs 재고 증가율</h2><p>재고가 급증하고 생산이 꺾이는 시기를 찾아보세요 (예: 2022년).</p><div class="chart" id="c3"></div></div>
 
